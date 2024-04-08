@@ -20,10 +20,16 @@ func (l *CalcListener) ExitBraceOrEqualInitializer(c *parser.BraceOrEqualInitial
 	}
 }
 
-// func (l *CalcListener) ExitInitializerList(c *parser.InitializerListContext) {
-// 	initializersCount := len(c.AllInitializerClause())
-
-// }
+func (l *CalcListener) ExitInitializerList(c *parser.InitializerListContext) {
+	// initializersCount := len(c.AllInitializerClause())
+	length := len(c.AllInitializerClause())
+	exprListNode := cpp_ast.ExpressionListNode{}
+	exprListNode.SetLocationFromToken(c.GetParser().GetCurrentToken())
+	for i := 0; i < length; i++ {
+		exprListNode.Expressions = append(exprListNode.Expressions, l.StackPop())
+	}
+	l.pushStack(&exprListNode)
+}
 
 func (l *CalcListener) ExitInitializer(c *parser.InitializerContext) {
 	// decl := c.Declarator()
@@ -33,13 +39,14 @@ func (l *CalcListener) ExitInitializer(c *parser.InitializerContext) {
 	if boeInitalizer != nil {
 		return
 	} else if exprList != nil {
-		length := len(exprList.InitializerList().AllInitializerClause())
-		exprListNode := cpp_ast.ExpressionListNode{}
-		exprListNode.SetLocationFromToken(c.GetParser().GetCurrentToken())
-		for i := 0; i < length; i++ {
-			exprListNode.Expressions = append(exprListNode.Expressions, l.StackPop())
-		}
-		l.pushStack(&exprListNode)
+		return
+		// length := len(exprList.InitializerList().AllInitializerClause())
+		// exprListNode := cpp_ast.ExpressionListNode{}
+		// exprListNode.SetLocationFromToken(c.GetParser().GetCurrentToken())
+		// for i := 0; i < length; i++ {
+		// 	exprListNode.Expressions = append(exprListNode.Expressions, l.StackPop())
+		// }
+		// l.pushStack(&exprListNode)
 	} else {
 		panic("error condition!")
 	}

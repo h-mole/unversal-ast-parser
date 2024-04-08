@@ -1,8 +1,8 @@
 int main()
 {
-  // int a;
+  f += 1;
+  e = call(1, arg);
   a = 123;
   b = 4567;
-  func(a, b);
   // return a;
 }

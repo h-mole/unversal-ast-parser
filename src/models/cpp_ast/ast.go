@@ -75,6 +75,14 @@ type AssignmentNode struct {
 	RValue          BaseNodeMethods `json:"r_value"`
 }
 
+type BinaryOperatorNode struct {
+	BaseNodeInfo
+	BaseNodeMethods `json:"-"`
+	Operator        string          `json:"operator"`
+	LOperand        BaseNodeMethods `json:"l_operand"`
+	ROperand        BaseNodeMethods `json:"r_operand"`
+}
+
 type CallNode struct {
 	BaseNodeInfo
 	BaseNodeMethods `json:"-"`
@@ -82,10 +90,23 @@ type CallNode struct {
 	Arguments       *ExpressionListNode `json:"arguments"`
 }
 
+type ArrayReferenceNode struct {
+	BaseNodeInfo
+	BaseNodeMethods `json:"-"`
+	Name            BaseNodeMethods `json:"name"`
+	Subscript       BaseNodeMethods `json:"subscript"`
+}
+
 type StatementNode struct {
 	BaseNodeInfo
 	BaseNodeMethods `json:"-"`
 	Child           BaseNodeMethods `json:"child"`
+}
+
+type CompoundNode struct {
+	BaseNodeInfo
+	BaseNodeMethods `json:"-"`
+	BlockItems      []BaseNodeMethods `json:"block_items"`
 }
 
 type ExpressionListNode struct {

@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"slices"
+	"sort"
 
 	"github.com/antlr4-go/antlr/v4"
 )
@@ -55,6 +57,11 @@ func (l *CalcListener) StackPop() cpp_ast.BaseNodeMethods {
 	return l.stack[length-1]
 }
 
+func (l *CalcListener) StackPeek(i int) cpp_ast.BaseNodeMethods {
+	length := len(l.stack)
+	return l.stack[length-i-1]
+}
+
 // 发生错误时，处理错误
 func (l *CalcListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e antlr.RecognitionException) {
 
@@ -83,9 +90,8 @@ func (l *CalcListener) ExitPrimaryExpression(c *parser.PrimaryExpressionContext)
 		return
 	} else if len(c.AllLiteral()) > 0 {
 		node := &cpp_ast.LiteralNode{Values: make([]string, len(c.AllLiteral()))}
-		for _, literal := range c.AllLiteral() {
-			fmt.Println("literal", literal.GetText())
-			node.Values = append(node.Values, literal.GetText())
+		for i, literal := range c.AllLiteral() {
+			node.Values[i] = literal.GetText()
 		}
 		node.SetLocationFromToken(c.GetStart())
 		l.pushStack(node)
@@ -96,7 +102,14 @@ func (l *CalcListener) ExitPrimaryExpression(c *parser.PrimaryExpressionContext)
 
 func (l *CalcListener) ExitPostfixExpression(c *parser.PostfixExpressionContext) {
 	if c.PrimaryExpression() != nil {
-		fmt.Println("primary expr")
+	} else if c.PostfixExpression() != nil {
+		if c.ExpressionList() != nil {
+			l.CreateCallNode(c)
+		} else if c.LeftBracket() != nil {
+			l.CreateArrayReferenceNode(c)
+		} else {
+			panic("cannot handle this type!")
+		}
 	} else {
 		panic("cannot handle this type!")
 	}
@@ -104,7 +117,7 @@ func (l *CalcListener) ExitPostfixExpression(c *parser.PostfixExpressionContext)
 
 func (l *CalcListener) ExitUnaryExpression(c *parser.UnaryExpressionContext) {
 	if c.PostfixExpression() != nil {
-		fmt.Println("postfix expr")
+		return // IGNORE
 	} else {
 		panic("cannot handle this type!")
 	}
@@ -112,7 +125,7 @@ func (l *CalcListener) ExitUnaryExpression(c *parser.UnaryExpressionContext) {
 
 func (l *CalcListener) ExitCastExpression(c *parser.CastExpressionContext) {
 	if c.UnaryExpression() != nil {
-		fmt.Println("cast_expr-unary expr")
+		return // IGNORE
 	} else {
 		panic("cannot handle this type!")
 	}
@@ -125,8 +138,16 @@ func (l *CalcListener) ExitPointerMemberExpression(c *parser.PointerMemberExpres
 }
 
 func (l *CalcListener) ExitMultiplicativeExpression(c *parser.MultiplicativeExpressionContext) {
-	for _, expr := range c.AllPointerMemberExpression() {
-		fmt.Println("pointer-member-expr", expr)
+	var operators []antlr.TerminalNode = append(c.AllDiv(), append(c.AllMod(), c.AllStar()...)...)
+	sort.Slice(operators, func(i, j int) bool {
+		return operators[i].GetSymbol().GetTokenIndex() < operators[j].GetSymbol().GetTokenIndex()
+	})
+
+	slices.Reverse(operators)
+	pointerMemberExprs := c.AllPointerMemberExpression()
+	slices.Reverse(pointerMemberExprs)
+	for _, op := range operators {
+		l.CreateBinaryOperatorNode(c, op)
 	}
 }
 
@@ -217,17 +238,7 @@ func (l *CalcListener) ExitInitDeclarator(c *parser.InitDeclaratorContext) {
 			assignment.SetLocation(l_location.Line, l_location.Column)
 			l.pushStack(assignment)
 		} else {
-			fmt.Println("======")
-			fmt.Println(l.DumpStack())
-			arguments, callee := l.StackPop(), l.StackPop()
-			exprList, ok := arguments.(*cpp_ast.ExpressionListNode)
-			if !ok {
-				fmt.Println(reflect.TypeOf(callee), reflect.TypeOf(arguments))
-				panic("stack item does not match")
-			}
-			callNode := &cpp_ast.CallNode{Name: callee, Arguments: exprList}
-			callNode.SetLocationFromToken(c.GetParser().GetCurrentToken())
-			l.pushStack(callNode)
+			l.CreateCallNode(c)
 		}
 	} else {
 		panic("not implemented such method!")
@@ -241,9 +252,9 @@ func (l *CalcListener) ExitAssignmentExpression(c *parser.AssignmentExpressionCo
 	op := c.AssignmentOperator()
 	fmt.Println("op", op, "cond", c.ConditionalExpression())
 	if op == nil {
-		return
+		return // IGNORE
 	} else {
-		logicalOrExpr, initClause := l.StackPop(), l.StackPop()
+		initClause, logicalOrExpr := l.StackPop(), l.StackPop()
 		out := convertAssignmentOperator(op)
 		l.pushStack(&cpp_ast.AssignmentNode{
 			BaseNodeInfo: cpp_ast.BaseNodeInfo{
@@ -270,7 +281,7 @@ func (l *CalcListener) ExitStatement(c *parser.StatementContext) {
 	l.pushStack(stmt)
 }
 
-func ParseFile(file string) []cpp_ast.BaseNodeMethods {
+func ParseFile(file string) *CalcListener {
 	input, err := antlr.NewFileStream(file)
 	if err != nil {
 		panic(err)
@@ -286,10 +297,8 @@ func ParseFile(file string) []cpp_ast.BaseNodeMethods {
 	var listener CalcListener
 	listener.stack = make([]cpp_ast.BaseNodeMethods, 0)
 	antlr.ParseTreeWalkerDefault.Walk(&listener, tree)
-	// ret, _ := json.MarshalIndent(listener.stack, "", "  ")
-	// ioutil.WriteFile("test.json", ret, 666)
-	// fmt.Println("写入成功")
-	return listener.stack
+
+	return &listener
 }
 
 func Main() {
